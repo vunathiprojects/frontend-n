@@ -1,56 +1,147 @@
-# azure-pipelines-frontend.yml
+# azure-pipelines.yml
 trigger:
   branches:
     include:
-      - main
+    - main
 
 variables:
   azureSubscription: 'novya-serviceconnection'
-  storageAccountName: 'novyastorageaccount'
-  reactApiUrl: 'https://backend-n.azurewebsites.net'
-  frontendDir: '.' # change if frontend code is inside /frontend folder
+  appName: 'backend-n'
+  nodeVersion: '18.x'
+  pythonVersion: '3.11'
 
 pool:
   vmImage: 'ubuntu-latest'
 
-steps:
-  - task: NodeTool@0
-    displayName: 'Use Node 18'
-    inputs:
-      versionSpec: '18.x'
+stages:
+- stage: Build
+  displayName: 'Build and Test'
+  jobs:
+  - job: BuildBackend
+    displayName: 'Build Backend'
+    steps:
+    
+    # Node.js dependencies for frontend/React
+    - task: NodeTool@0
+      inputs:
+        versionSpec: '$(nodeVersion)'
+      displayName: 'Install Node.js'
+    
+    - script: |
+        echo "Installing npm dependencies with legacy peer deps..."
+        npm install --legacy-peer-deps
+        echo "✅ Dependencies installed successfully!"
+      displayName: 'Install npm dependencies'
+    
+    - script: |
+        echo "Building React application..."
+        npm run build
+        echo "✅ Build completed successfully!"
+      displayName: 'Build React app'
+    
+    - script: |
+        echo "Running tests..."
+        npm test -- --coverage --watchAll=false --passWithNoTests
+        echo "✅ Tests completed!"
+      displayName: 'Run tests'
+    
+    # Python backend dependencies
+    - task: UsePythonVersion@0
+      inputs:
+        versionSpec: '$(pythonVersion)'
+      displayName: 'Use Python $(pythonVersion)'
+    
+    - script: |
+        echo "Upgrading pip..."
+        python -m pip install --upgrade pip
+        echo "Installing Python dependencies..."
+        pip install -r requirements.txt
+        echo "✅ Python dependencies installed!"
+      displayName: 'Install Python dependencies'
+    
+    - script: |
+        echo "Running Python tests..."
+        python -m pytest tests/ -v --tb=short
+        echo "✅ Python tests completed!"
+      displayName: 'Run Python tests'
+    
+    - script: |
+        echo "Running Django system checks..."
+        python manage.py check
+        echo "✅ Django system check passed!"
+      displayName: 'Django system check'
+    
+    # Security and quality checks
+    - script: |
+        echo "Running security audit..."
+        npm audit --audit-level moderate || true
+      displayName: 'Security audit'
+    
+    - script: |
+        echo "Checking for outdated packages..."
+        npm outdated || true
+      displayName: 'Check outdated packages'
+    
+    # Publish test results
+    - task: PublishTestResults@2
+      inputs:
+        testResultsFiles: '**/test-*.xml'
+        testRunTitle: 'Test Results'
+        failTaskOnFailedTests: false
+      displayName: 'Publish test results'
+    
+    # Publish build artifacts
+    - task: PublishBuildArtifacts@1
+      inputs:
+        pathToPublish: '$(System.DefaultWorkingDirectory)/build'
+        artifact: 'react-build'
+        publishLocation: 'Container'
+      displayName: 'Publish React build'
+    
+    - task: PublishBuildArtifacts@1
+      inputs:
+        pathToPublish: '$(System.DefaultWorkingDirectory)'
+        artifact: 'backend-code'
+        publishLocation: 'Container'
+      displayName: 'Publish backend code'
 
-  - script: |
-      echo "Cleaning npm cache and upgrading npm..."
-      npm cache clean --force
-      npm install -g npm@8
-      npm -v
-      node -v
-    displayName: 'Prepare Node environment'
+- stage: Deploy
+  displayName: 'Deploy to Staging'
+  dependsOn: Build
+  condition: succeeded()
+  jobs:
+  - deployment: DeployToStaging
+    environment: 'staging'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - download: current
+            artifact: 'react-build'
+          - download: current
+            artifact: 'backend-code'
+          
+          - task: AzureWebApp@1
+            inputs:
+              azureSubscription: '$(azureSubscription)'
+              appName: '$(appName)-staging'
+              package: '$(Pipeline.Workspace)/backend-code'
+            displayName: 'Deploy to Azure Web App'
 
-  - task: Npm@1
-    displayName: 'Install dependencies'
-    inputs:
-      command: 'install'
-      workingDir: '$(frontendDir)'
-
-  - script: |
-      echo "REACT_APP_API_URL=$(REACT_APP_API_URL)"
-      npm run build
-    workingDirectory: '$(frontendDir)'
-    env:
-      REACT_APP_API_URL: $(reactApiUrl)
-    displayName: 'Build React app'
-
-  - task: AzureCLI@2
-    displayName: 'Upload build to Azure Storage Static Website'
-    inputs:
-      azureSubscription: $(azureSubscription)
-      scriptType: 'bash'
-      scriptLocation: 'inlineScript'
-      inlineScript: |
-        echo "Uploading React build to Azure Storage..."
-        az storage blob upload-batch \
-          --destination '$web' \
-          --account-name $(storageAccountName) \
-          --source "$(Build.SourcesDirectory)/$(frontendDir)/build" \
-          --overwrite
+- stage: Production
+  displayName: 'Deploy to Production'
+  dependsOn: Deploy
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+  jobs:
+  - deployment: DeployToProduction
+    environment: 'production'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: AzureWebApp@1
+            inputs:
+              azureSubscription: '$(azureSubscription)'
+              appName: '$(appName)-prod'
+              package: '$(Pipeline.Workspace)/backend-code'
+            displayName: 'Deploy to Production'
