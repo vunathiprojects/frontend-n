@@ -1,0 +1,56 @@
+# azure-pipelines-frontend.yml
+trigger:
+  branches:
+    include:
+      - main
+
+variables:
+  azureSubscription: 'novya-serviceconnection'
+  storageAccountName: 'novyastorageaccount'
+  reactApiUrl: 'https://backend-n.azurewebsites.net'
+  frontendDir: '.' # change if frontend code is inside /frontend folder
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+steps:
+  - task: NodeTool@0
+    displayName: 'Use Node 18'
+    inputs:
+      versionSpec: '18.x'
+
+  - script: |
+      echo "Cleaning npm cache and upgrading npm..."
+      npm cache clean --force
+      npm install -g npm@8
+      npm -v
+      node -v
+    displayName: 'Prepare Node environment'
+
+  - task: Npm@1
+    displayName: 'Install dependencies'
+    inputs:
+      command: 'install'
+      workingDir: '$(frontendDir)'
+
+  - script: |
+      echo "REACT_APP_API_URL=$(REACT_APP_API_URL)"
+      npm run build
+    workingDirectory: '$(frontendDir)'
+    env:
+      REACT_APP_API_URL: $(reactApiUrl)
+    displayName: 'Build React app'
+
+  - task: AzureCLI@2
+    displayName: 'Upload build to Azure Storage Static Website'
+    inputs:
+      azureSubscription: $(azureSubscription)
+      scriptType: 'bash'
+      scriptLocation: 'inlineScript'
+      inlineScript: |
+        echo "Uploading React build to Azure Storage..."
+        az storage blob upload-batch \
+          --destination '$web' \
+          --account-name $(storageAccountName) \
+          --source "$(Build.SourcesDirectory)/$(frontendDir)/build" \
+          --overwrite
