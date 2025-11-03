@@ -10,6 +10,14 @@
 const DJANGO_BASE_URL = process.env.REACT_APP_DJANGO_URL || 'https://backend-n.azurewebsites.net/api';
 const FASTAPI_BASE_URL = process.env.REACT_APP_FASTAPI_URL || 'https://backend-n.azurewebsites.net';
 
+// Debug logging
+console.log('🚀 API Config Loaded:');
+console.log('Django URL:', DJANGO_BASE_URL);
+console.log('FastAPI URL:', FASTAPI_BASE_URL);
+console.log('Quick Practice Endpoint:', `${FASTAPI_BASE_URL}/quick-practice`);
+console.log('Environment Django URL:', process.env.REACT_APP_DJANGO_URL);
+console.log('Environment FastAPI URL:', process.env.REACT_APP_FASTAPI_URL);
+
 /**
  * API Endpoints Configuration
  */
