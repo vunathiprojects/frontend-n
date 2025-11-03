@@ -6,7 +6,7 @@
  * 2. FastAPI Backend (AI_BACKEND) - AI features (quiz generation, chatbot, study plans)
  */
 
-// Backend URLs
+// Backend URLs - Both pointing to Azure
 const DJANGO_BASE_URL = process.env.REACT_APP_DJANGO_URL || 'https://backend-n.azurewebsites.net/api';
 const FASTAPI_BASE_URL = process.env.REACT_APP_FASTAPI_URL || 'https://backend-n.azurewebsites.net';
 
@@ -112,25 +112,25 @@ export const API_CONFIG = {
   FASTAPI: {
     BASE_URL: FASTAPI_BASE_URL,
     
-    // Quick Practice (AI-Generated Quizzes)
+    // Quick Practice (AI-Generated Quizzes) - CORRECTED ENDPOINTS
     QUICK_PRACTICE: {
-      GET_CLASSES: `${FASTAPI_BASE_URL}/classes`,
-      GET_CHAPTERS: (className) => `${FASTAPI_BASE_URL}/chapters?class_name=${className}`,
-      GET_SUBTOPICS: (className, subject) => `${FASTAPI_BASE_URL}/subtopics?class_name=${className}&subject=${encodeURIComponent(subject)}`,
+      GET_CLASSES: `${FASTAPI_BASE_URL}/quick-practice`,
+      GET_CHAPTERS: (className) => `${FASTAPI_BASE_URL}/quick-practice/${encodeURIComponent(className)}`,
+      GET_SUBTOPICS: (className, subject) => `${FASTAPI_BASE_URL}/quick-practice/${encodeURIComponent(className)}/${encodeURIComponent(subject)}`,
       GENERATE_QUIZ: (params) => {
-        const queryParams = new URLSearchParams(params).toString();
-        return `${FASTAPI_BASE_URL}/quiz?${queryParams}`;
+        const { subtopic, currentLevel, retry, language } = params;
+        return `${FASTAPI_BASE_URL}/quick-practice/${encodeURIComponent(subtopic)}/${currentLevel}?retry=${retry}&language=${language}`;
       },
     },
     
-    // Mock Tests (AI-Generated)
+    // Mock Tests (AI-Generated) - CORRECTED ENDPOINTS
     MOCK_TEST: {
-      GET_CLASSES: `${FASTAPI_BASE_URL}/mock_classes`,
-      GET_SUBJECTS: (className) => `${FASTAPI_BASE_URL}/mock_subjects?class_name=${className}`,
-      GET_CHAPTERS: (className, subject) => `${FASTAPI_BASE_URL}/mock_chapters?class_name=${className}&subject=${encodeURIComponent(subject)}`,
+      GET_CLASSES: `${FASTAPI_BASE_URL}/quick-practice`,
+      GET_SUBJECTS: (className) => `${FASTAPI_BASE_URL}/quick-practice/${encodeURIComponent(className)}`,
+      GET_CHAPTERS: (className, subject) => `${FASTAPI_BASE_URL}/quick-practice/${encodeURIComponent(className)}/${encodeURIComponent(subject)}`,
       GENERATE_TEST: (params) => {
-        const queryParams = new URLSearchParams(params).toString();
-        return `${FASTAPI_BASE_URL}/mock_test?${queryParams}`;
+        const { subtopic, currentLevel, retry, language } = params;
+        return `${FASTAPI_BASE_URL}/quick-practice/${encodeURIComponent(subtopic)}/${currentLevel}?retry=${retry}&language=${language}`;
       },
     },
     
@@ -148,8 +148,6 @@ export const API_CONFIG = {
  */
 export const getAuthHeaders = () => {
   const token = localStorage.getItem('userToken');
-  console.log('🔍 Debug - getAuthHeaders - Token exists:', !!token);
-  console.log('🔍 Debug - getAuthHeaders - Token preview:', token ? token.substring(0, 50) + '...' : 'No token');
   
   // Check if token is valid (basic check - not expired format)
   if (token && token.includes('.')) {
@@ -157,12 +155,12 @@ export const getAuthHeaders = () => {
       const payload = JSON.parse(atob(token.split('.')[1]));
       const now = Math.floor(Date.now() / 1000);
       if (payload.exp && payload.exp < now) {
-        console.log('🔍 Debug - Token is expired, clearing authentication data');
+        console.log('Token is expired, clearing authentication data');
         clearAuthData();
         return { 'Content-Type': 'application/json' };
       }
     } catch (e) {
-      console.log('🔍 Debug - Invalid token format, clearing authentication data');
+      console.log('Invalid token format, clearing authentication data');
       clearAuthData();
       return { 'Content-Type': 'application/json' };
     }
@@ -189,7 +187,6 @@ export const clearAuthData = () => {
   localStorage.removeItem('parentData');
   localStorage.removeItem('studentDataLastFetch');
   localStorage.removeItem('parentDataLastFetch');
-  console.log('🔍 Debug - All authentication data cleared from api.js');
 };
 
 /**
@@ -206,24 +203,19 @@ export const getNoAuthHeaders = () => {
  */
 export const djangoAPI = {
   get: async (url) => {
-    console.log('🔍 Debug - djangoAPI.get called with URL:', url);
-    console.log('🔍 Debug - Headers:', getAuthHeaders());
+    console.log('🔍 Django API GET:', url);
     
     const response = await fetch(url, {
       method: 'GET',
       headers: getAuthHeaders(),
     });
     
-    console.log('🔍 Debug - Response status:', response.status);
-    console.log('🔍 Debug - Response ok:', response.ok);
-    
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('❌ API Error Response:', errorText);
+      console.error('❌ Django API Error:', response.status, errorText);
       
       // If 401 Unauthorized, clear authentication data
       if (response.status === 401) {
-        console.log('🔍 Debug - 401 Unauthorized, clearing authentication data');
         clearAuthData();
       }
       
@@ -231,14 +223,12 @@ export const djangoAPI = {
     }
     
     const data = await response.json();
-    console.log('🔍 Debug - Response data:', data);
+    console.log('✅ Django API Response:', data);
     return data;
   },
   
   post: async (url, data) => {
-    console.log('🔍 Debug - djangoAPI.post called with URL:', url);
-    console.log('🔍 Debug - Headers:', getAuthHeaders());
-    console.log('🔍 Debug - Data:', data);
+    console.log('🔍 Django API POST:', url, data);
     
     const response = await fetch(url, {
       method: 'POST',
@@ -246,16 +236,12 @@ export const djangoAPI = {
       body: JSON.stringify(data),
     });
     
-    console.log('🔍 Debug - Response status:', response.status);
-    console.log('🔍 Debug - Response ok:', response.ok);
-    
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('❌ API Error Response:', errorText);
+      console.error('❌ Django API Error:', response.status, errorText);
       
       // If 401 Unauthorized, clear authentication data
       if (response.status === 401) {
-        console.log('🔍 Debug - 401 Unauthorized, clearing authentication data');
         clearAuthData();
       }
       
@@ -263,15 +249,13 @@ export const djangoAPI = {
     }
     
     const responseData = await response.json();
-    console.log('🔍 Debug - Response data:', responseData);
+    console.log('✅ Django API Response:', responseData);
     return responseData;
   },
   
   // Special method for registration (no auth needed)
   postNoAuth: async (url, data) => {
-    console.log('🔍 Debug - djangoAPI.postNoAuth called with URL:', url);
-    console.log('🔍 Debug - Headers:', getNoAuthHeaders());
-    console.log('🔍 Debug - Data:', data);
+    console.log('🔍 Django API POST (No Auth):', url, data);
     
     const response = await fetch(url, {
       method: 'POST',
@@ -279,24 +263,19 @@ export const djangoAPI = {
       body: JSON.stringify(data),
     });
     
-    console.log('🔍 Debug - Response status:', response.status);
-    console.log('🔍 Debug - Response ok:', response.ok);
-    
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('❌ API Error Response:', errorText);
+      console.error('❌ Django API Error:', response.status, errorText);
       throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
     }
     
     const responseData = await response.json();
-    console.log('🔍 Debug - Response data:', responseData);
+    console.log('✅ Django API Response:', responseData);
     return responseData;
   },
   
   put: async (url, data) => {
-    console.log('🔍 Debug - djangoAPI.put called with URL:', url);
-    console.log('🔍 Debug - Headers:', getAuthHeaders());
-    console.log('🔍 Debug - Data:', data);
+    console.log('🔍 Django API PUT:', url, data);
 
     const response = await fetch(url, {
       method: 'PUT',
@@ -304,26 +283,36 @@ export const djangoAPI = {
       body: JSON.stringify(data),
     });
     
-    console.log('🔍 Debug - Response status:', response.status);
-    console.log('🔍 Debug - Response ok:', response.ok);
-    
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('❌ API Error Response:', errorText);
+      console.error('❌ Django API Error:', response.status, errorText);
       throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
     }
     
     const responseData = await response.json();
-    console.log('🔍 Debug - Response data:', responseData);
+    console.log('✅ Django API Response:', responseData);
     return responseData;
   },
   
   delete: async (url) => {
+    console.log('🔍 Django API DELETE:', url);
+    
     const response = await fetch(url, {
       method: 'DELETE',
       headers: getAuthHeaders(),
     });
-    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ Django API Error:', response.status, errorText);
+      throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
+    }
+    
+    // For DELETE, return success message if no content
+    if (response.status === 204) {
+      return { success: true, message: 'Deleted successfully' };
+    }
+    
     return await response.json();
   },
 };
@@ -340,22 +329,17 @@ export const quizTrackingAPI = {
   // Get recent quiz attempts
   getRecentAttempts: async (limit = 10) => {
     const url = `${API_CONFIG.DJANGO.QUIZZES.RECENT_ATTEMPTS}?limit=${limit}`;
-    console.log('🔍 Debug - getRecentAttempts URL:', url);
     return await djangoAPI.get(url);
   },
   
   // Get student performance
   getPerformance: async () => {
-    const url = API_CONFIG.DJANGO.QUIZZES.PERFORMANCE;
-    console.log('🔍 Debug - getPerformance URL:', url);
-    return await djangoAPI.get(url);
+    return await djangoAPI.get(API_CONFIG.DJANGO.QUIZZES.PERFORMANCE);
   },
   
   // Get detailed statistics
   getStatistics: async () => {
-    const url = API_CONFIG.DJANGO.QUIZZES.STATISTICS;
-    console.log('🔍 Debug - getStatistics URL:', url);
-    return await djangoAPI.get(url);
+    return await djangoAPI.get(API_CONFIG.DJANGO.QUIZZES.STATISTICS);
   },
 };
 
@@ -364,24 +348,43 @@ export const quizTrackingAPI = {
  */
 export const fastAPI = {
   get: async (url) => {
+    console.log('🔍 FastAPI GET:', url);
+    
     const response = await fetch(url, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
     });
-    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-    return await response.json();
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ FastAPI Error:', response.status, errorText);
+      throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
+    }
+    
+    const data = await response.json();
+    console.log('✅ FastAPI Response:', data);
+    return data;
   },
   
   post: async (url, data) => {
+    console.log('🔍 FastAPI POST:', url, data);
+    
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });
-    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-    return await response.json();
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ FastAPI Error:', response.status, errorText);
+      throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
+    }
+    
+    const responseData = await response.json();
+    console.log('✅ FastAPI Response:', responseData);
+    return responseData;
   },
 };
 
 export default API_CONFIG;
-
