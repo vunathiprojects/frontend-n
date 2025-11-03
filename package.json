@@ -50,7 +50,7 @@
     "predeploy": "npm run build",
     "deploy": "gh-pages -d build"
   },
- "proxy": "https://novya-backend.azurewebsites.net",
+ "proxy": "backend-n.azurewebsites.net",
 
   "eslintConfig": {
     "extends": [
