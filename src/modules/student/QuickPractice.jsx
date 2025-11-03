@@ -6,23 +6,7 @@ import { useQuiz } from "./QuizContext";
 import { submitQuizAttempt, calculateQuizStats } from "../../utils/quizTracking";
 import { API_CONFIG, fastAPI } from "../../config/api";
 import "./Quiz.css";
-
-// Updated API configuration with new backend URL
-const UPDATED_API_CONFIG = {
-  FASTAPI: {
-    BASE_URL: 'https://backend-n.azurewebsites.net',
-    QUICK_PRACTICE: {
-      GET_CLASSES: '/quick-practice',
-      GET_CHAPTERS: (className) => `/quick-practice/${encodeURIComponent(className)}`,
-      GET_SUBTOPICS: (className, subject) => `/quick-practice/${encodeURIComponent(className)}/${encodeURIComponent(subject)}`,
-      GENERATE_QUIZ: (params) => {
-        const { subtopic, currentLevel, retry, language } = params;
-        return `/quick-practice/${encodeURIComponent(subtopic)}/${currentLevel}?retry=${retry}&language=${language}`;
-      }
-    }
-  }
-};
-
+ 
 function Quiz() {
   const { updateQuizResults } = useQuiz();
   const [classes, setClasses] = useState([]);
@@ -36,175 +20,142 @@ function Quiz() {
   const [selectedClass, setSelectedClass] = useState(null);
   const [selectedSubject, setSelectedSubject] = useState(null);
   const [selectedSubtopic, setSelectedSubtopic] = useState(null);
-  const [selectedLanguage, setSelectedLanguage] = useState("English");
+  const [selectedLanguage, setSelectedLanguage] = useState("English"); // NEW: Store selected language
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [showAnswer, setShowAnswer] = useState(false);
   const [currentLevel, setCurrentLevel] = useState(1);
   const [userAnswers, setUserAnswers] = useState([]);
   const [quizStartTime, setQuizStartTime] = useState(null);
-
+ 
   // Fetch classes
   useEffect(() => {
-    const fetchClasses = async () => {
-      try {
-        setLoading(true);
-        const data = await fastAPI.get(UPDATED_API_CONFIG.FASTAPI.QUICK_PRACTICE.GET_CLASSES);
-        setClasses(data.classes || []);
-      } catch (error) {
-        console.error("Failed to load classes:", error);
-        setError("Failed to load classes");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchClasses();
+    fastAPI.get(API_CONFIG.FASTAPI.QUICK_PRACTICE.GET_CLASSES)
+      .then((data) => setClasses(data.classes))
+      .catch(() => setError("Failed to load classes"));
   }, []);
-
-  const fetchSubjects = async (className) => {
+ 
+  const fetchSubjects = (className) => {
     if (!className) return;
-    
-    try {
-      setLoading(true);
-      setError(null);
-      const data = await fastAPI.get(UPDATED_API_CONFIG.FASTAPI.QUICK_PRACTICE.GET_CHAPTERS(className));
-      setSubjects(data.chapters || []);
-    } catch (error) {
-      console.error("Failed to load subjects:", error);
-      setError("Failed to load subjects");
-    } finally {
-      setLoading(false);
-    }
+    setLoading(true);
+    fastAPI.get(API_CONFIG.FASTAPI.QUICK_PRACTICE.GET_CHAPTERS(className))
+      .then((data) => {
+        setSubjects(data.chapters || []);
+        setLoading(false);
+      })
+      .catch(() => {
+        setError("Failed to load subjects");
+        setLoading(false);
+      });
   };
-
-  const fetchSubtopics = async (className, subject) => {
+ 
+  const fetchSubtopics = (className, subject) => {
     if (!className || !subject) return;
-    
-    try {
-      setLoading(true);
-      setError(null);
-      const data = await fastAPI.get(UPDATED_API_CONFIG.FASTAPI.QUICK_PRACTICE.GET_SUBTOPICS(className, subject));
-      
-      if (Array.isArray(data.subtopics)) {
-        setSubtopics({ "Chapter 1": data.subtopics });
-      } else if (typeof data.subtopics === "object" && data.subtopics !== null) {
-        setSubtopics(data.subtopics);
-      } else {
-        setSubtopics({});
-        setError("Invalid subtopics data format");
-      }
-    } catch (error) {
-      console.error("Failed to load subtopics:", error);
-      setError("Failed to load subtopics");
-    } finally {
-      setLoading(false);
-    }
+    setLoading(true);
+    fastAPI.get(API_CONFIG.FASTAPI.QUICK_PRACTICE.GET_SUBTOPICS(className, subject))
+      .then((data) => {
+        if (Array.isArray(data.subtopics)) {
+          setSubtopics({ "Chapter 1": data.subtopics });
+        } else if (typeof data.subtopics === "object" && data.subtopics !== null) {
+          setSubtopics(data.subtopics);
+        } else {
+          setSubtopics({});
+          setError("Invalid subtopics data format");
+        }
+        setLoading(false);
+      })
+      .catch(() => {
+        setError("Failed to load subtopics");
+        setLoading(false);
+      });
   };
-
-  const fetchQuiz = async (subtopic, level = 1, retry = false, language = "English") => {
+ 
+  // UPDATED: fetchQuiz now accepts language parameter
+  const fetchQuiz = (subtopic, level = 1, retry = false, language = "English") => {
     if (!subtopic) return;
+    setLoading(true);
     
-    try {
-      setLoading(true);
-      setError(null);
-      
-      // Construct URL with language parameter using updated API config
-      const params = {
-        subtopic: subtopic,
-        currentLevel: level,
-        retry: retry,
-        language: language
-      };
-      const url = UPDATED_API_CONFIG.FASTAPI.QUICK_PRACTICE.GENERATE_QUIZ(params);
-      
-      console.log("Fetching quiz with URL:", url);
-      console.log("Language being sent:", language);
-      
-      const data = await fastAPI.get(url);
-      console.log("Quiz data received:", data);
-      
-      if (data.error) {
-        setError(data.error);
-      } else if (!data.quiz || !Array.isArray(data.quiz)) {
-        setError("Invalid quiz data received from server");
-      } else {
-        const cleanedQuiz = data.quiz.map((q) => {
-          // Safely clean options and answer
-          if (q.options && Array.isArray(q.options)) {
-            q.options = q.options.map((opt) => 
-              typeof opt === 'string' ? opt.replace(/^[A-D][).]\s*/, "") : String(opt)
-            );
-          }
-          if (q.answer && typeof q.answer === 'string') {
+    // Construct URL with language parameter using API config
+    const params = {
+      subtopic: subtopic,
+      currentLevel: level,
+      retry: retry,
+      language: language
+    };
+    const url = API_CONFIG.FASTAPI.QUICK_PRACTICE.GENERATE_QUIZ(params);
+    
+    console.log("Fetching quiz with URL:", url); // Debug log
+    console.log("Language being sent:", language); // Debug log
+    
+    fastAPI.get(url)
+      .then((data) => {
+        console.log("Quiz data received:", data); // Debug log
+        if (data.error) setError(data.error);
+        else {
+          const cleanedQuiz = data.quiz.map((q) => {
+            q.options = q.options.map((opt) => opt.replace(/^[A-D][).]\s*/, ""));
             q.answer = q.answer.replace(/^[A-D][).]\s*/, "");
-          }
-          return q;
-        });
-        
-        setQuiz(cleanedQuiz);
-        setCurrentLevel(data.currentLevel || level);
-        setCurrentQ(0);
-        setSelected(null);
-        setScore(0);
-        setIsFinished(false);
-        setShowAnswer(false);
-        setUserAnswers([]);
-      }
-    } catch (error) {
-      console.error("Fetch error:", error);
-      setError(`Failed to load quiz: ${error.message}`);
-    } finally {
-      setLoading(false);
-    }
+            return q;
+          });
+          setQuiz(cleanedQuiz);
+          setCurrentLevel(data.currentLevel || level);
+          setCurrentQ(0);
+          setSelected(null);
+          setScore(0);
+          setIsFinished(false);
+          setShowAnswer(false);
+          setUserAnswers([]);
+          setError(null);
+        }
+        setLoading(false);
+      })
+      .catch((error) => {
+        console.error("Fetch error:", error);
+        setError(`Failed to load quiz: ${error.message}`);
+        setLoading(false);
+      });
   };
-
+ 
   const handleClassClick = (className) => {
     setSelectedClass(className);
     setSelectedSubject(null);
     setSelectedSubtopic(null);
-    setSubjects([]);
-    setSubtopics({});
     fetchSubjects(className);
   };
-
+ 
   const handleSubjectClick = (subject) => {
     setSelectedSubject(subject);
     setSelectedSubtopic(null);
-    setSubtopics({});
     fetchSubtopics(selectedClass, subject);
   };
-
+ 
+  // UPDATED: handleSubtopicClick now accepts language parameter
   const handleSubtopicClick = (subtopic, language = "English") => {
-    console.log("Subtopic clicked:", subtopic, "Language:", language);
+    console.log("Subtopic clicked:", subtopic, "Language:", language); // Debug log
     setSelectedSubtopic(subtopic);
-    setSelectedLanguage(language);
+    setSelectedLanguage(language); // Store the selected language
     setCurrentLevel(1);
     setCurrentQ(0);
     setScore(0);
     setIsFinished(false);
     setUserAnswers([]);
     setError(null);
-    setQuizStartTime(Date.now());
+    setQuizStartTime(Date.now()); // Start timing the quiz
     enterFullScreen();
-    fetchQuiz(subtopic, 1, false, language);
+    fetchQuiz(subtopic, 1, false, language); // Pass language to fetchQuiz
   };
-
+ 
   const handleAnswer = (option) => {
-    if (showAnswer || isFinished) return; // Prevent answering after showing answer
-    
     setSelected(option);
     setShowAnswer(true);
-
+ 
     const newAnswers = [...userAnswers];
     newAnswers[currentQ] = option;
     setUserAnswers(newAnswers);
-
-    if (option === quiz[currentQ]?.answer) {
-      setScore(prevScore => prevScore + 1);
-    }
+ 
+    if (option === quiz[currentQ].answer) setScore(score + 1);
   };
-
+ 
   const nextQuestion = async () => {
     if (currentQ < quiz.length - 1) {
       setCurrentQ(currentQ + 1);
@@ -222,11 +173,11 @@ function Quiz() {
         const quizData = {
           quizType: 'ai_generated',
           subject: selectedSubject || 'Unknown',
-          chapter: '',
-          topic: selectedSubject || 'Unknown',
+          chapter: '', // Not available in current structure
+          topic: selectedSubject || 'Unknown', // Using subject as topic
           subtopic: selectedSubtopic || 'Unknown',
           className: selectedClass || 'Unknown',
-          difficultyLevel: 'simple',
+          difficultyLevel: 'simple', // Default for now
           language: selectedLanguage || 'English',
           totalQuestions: quizStats.totalQuestions || 0,
           correctAnswers: quizStats.correctAnswers || 0,
@@ -234,8 +185,8 @@ function Quiz() {
           unansweredQuestions: quizStats.unansweredQuestions || 0,
           timeTakenSeconds: timeTakenSeconds || 0,
           score: quizStats.score || 0,
-          quizQuestions: quiz || [],
-          userAnswers: (userAnswers || []).filter(answer => answer !== null && answer !== undefined)
+          quizQuestions: quiz || [], // Send actual quiz data
+          userAnswers: (userAnswers || []).filter(answer => answer !== null) // Filter out null answers
         };
         
         // Submit to backend
@@ -243,19 +194,23 @@ function Quiz() {
         const submitResponse = await submitQuizAttempt(quizData);
         console.log('✅ Quiz attempt submitted successfully!', submitResponse);
         
-        // Update local quiz results
+        // Update local quiz results (existing functionality)
         updateQuizResults(score, quiz.length, currentLevel, selectedClass, selectedSubject, selectedSubtopic);
         
       } catch (error) {
         console.error('❌ Error submitting quiz attempt:', error);
+        console.error('❌ Error details:', error.message);
+        console.error('❌ Stack trace:', error.stack);
+        // Still update local results even if backend submission fails
         updateQuizResults(score, quiz.length, currentLevel, selectedClass, selectedSubject, selectedSubtopic);
+        // Show error to user
         alert('Warning: Quiz results saved locally, but could not sync to server. Please check your connection.');
       } finally {
         exitFullScreen();
       }
     }
   };
-
+ 
   const prevQuestion = () => {
     if (currentQ > 0) {
       setCurrentQ(currentQ - 1);
@@ -263,8 +218,9 @@ function Quiz() {
       setShowAnswer(false);
     }
   };
-
+ 
   const backToChapters = () => {
+    // Only reset quiz and subtopic, keep subjects and class to avoid blinking
     setSelectedSubtopic(null);
     setQuiz([]);
     setCurrentQ(0);
@@ -275,37 +231,37 @@ function Quiz() {
     setUserAnswers([]);
     exitFullScreen();
   };
-
+ 
+  // UPDATED: retryQuiz now uses stored language
   const retryQuiz = () => {
     enterFullScreen();
     fetchQuiz(selectedSubtopic, currentLevel, true, selectedLanguage);
   };
-
+ 
+  // UPDATED: nextLevel now uses stored language
   const nextLevel = () => {
     const nextLvl = currentLevel + 1;
     setCurrentLevel(nextLvl);
     fetchQuiz(selectedSubtopic, nextLvl, false, selectedLanguage);
     enterFullScreen();
   };
-
+ 
   const enterFullScreen = () => {
     const elem = document.documentElement;
-    if (elem.requestFullscreen) {
-      elem.requestFullscreen().catch(err => {
-        console.log('Fullscreen error:', err);
-      });
-    }
+    if (elem.requestFullscreen) elem.requestFullscreen().catch(() => {});
+    else if (elem.mozRequestFullScreen) elem.mozRequestFullScreen();
+    else if (elem.webkitRequestFullscreen) elem.webkitRequestFullscreen();
+    else if (elem.msRequestFullscreen) elem.msRequestFullscreen();
   };
-
+ 
   const exitFullScreen = () => {
-    if (document.exitFullscreen) {
-      document.exitFullscreen().catch(err => {
-        console.log('Exit fullscreen error:', err);
-      });
-    }
+    if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
+    else if (document.mozCancelFullScreen) document.mozCancelFullScreen();
+    else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+    else if (document.msExitFullscreen) document.msExitFullscreen();
   };
-
-  if (loading) {
+ 
+  if (loading)
     return (
       <div className="loading-container">
         <div className="edu-loader">
@@ -322,46 +278,39 @@ function Quiz() {
         <p>Preparing your Quiz...</p>
       </div>
     );
-  }
-
+ 
   return (
     <>
       {error && (
         <div className="error-container">
           <div className="error-icon">⚠️</div>
           <p>{error}</p>
-          <button className="retry-btn" onClick={() => setError(null)}>
+          <button className="retry-btn" onClick={() => window.location.reload()}>
             Try Again
           </button>
         </div>
       )}
-
+ 
       {/* Grade Selection */}
-      {!selectedClass && !error && !loading && (
+      {!selectedClass && !error && (
         <QuizGrade classes={classes} onClassClick={handleClassClick} />
       )}
-
-      {/* Subject / Subtopic Selection */}
-      {selectedClass && !selectedSubtopic && !error && !loading && (
+ 
+      {/* Subject / Subtopic Selection - UPDATED: Pass handleSubtopicClick that accepts language */}
+      {selectedClass && !selectedSubtopic && !error && (
         <QuizSubject
           subjects={subjects}
           subtopics={subtopics}
           selectedSubject={selectedSubject}
           selectedClass={selectedClass}
-          onClassClick={() => {
-            setSelectedClass(null);
-            setSelectedSubject(null);
-            setSelectedSubtopic(null);
-            setSubjects([]);
-            setSubtopics({});
-          }}
+          onClassClick={() => setSelectedClass(null)} // smooth back to grades
           onSubjectClick={handleSubjectClick}
-          onSubtopicClick={handleSubtopicClick}
+          onSubtopicClick={handleSubtopicClick} // This now accepts (subtopic, language)
         />
       )}
-
+ 
       {/* Quiz Page */}
-      {selectedSubtopic && !error && !loading && (
+      {selectedSubtopic && !error && (
         <QuizQuestion
           quiz={quiz}
           currentQ={currentQ}
@@ -377,11 +326,11 @@ function Quiz() {
           backToChapters={backToChapters}
           currentLevel={currentLevel}
           userAnswers={userAnswers}
-          selectedLanguage={selectedLanguage}
+          selectedLanguage={selectedLanguage} // Pass language to QuizQuestion if needed
         />
       )}
     </>
   );
 }
-
+ 
 export default Quiz;
