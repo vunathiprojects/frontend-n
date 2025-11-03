@@ -6,7 +6,23 @@ import { useQuiz } from "./QuizContext";
 import { submitQuizAttempt, calculateQuizStats } from "../../utils/quizTracking";
 import { API_CONFIG, fastAPI } from "../../config/api";
 import "./Quiz.css";
- 
+
+// Updated API configuration with new backend URL
+const UPDATED_API_CONFIG = {
+  FASTAPI: {
+    BASE_URL: 'https://backend-n.azurewebsites.net',
+    QUICK_PRACTICE: {
+      GET_CLASSES: '/quick-practice',
+      GET_CHAPTERS: (className) => `/quick-practice/${encodeURIComponent(className)}`,
+      GET_SUBTOPICS: (className, subject) => `/quick-practice/${encodeURIComponent(className)}/${encodeURIComponent(subject)}`,
+      GENERATE_QUIZ: (params) => {
+        const { subtopic, currentLevel, retry, language } = params;
+        return `/quick-practice/${encodeURIComponent(subtopic)}/${currentLevel}?retry=${retry}&language=${language}`;
+      }
+    }
+  }
+};
+
 function Quiz() {
   const { updateQuizResults } = useQuiz();
   const [classes, setClasses] = useState([]);
@@ -20,25 +36,25 @@ function Quiz() {
   const [selectedClass, setSelectedClass] = useState(null);
   const [selectedSubject, setSelectedSubject] = useState(null);
   const [selectedSubtopic, setSelectedSubtopic] = useState(null);
-  const [selectedLanguage, setSelectedLanguage] = useState("English"); // NEW: Store selected language
+  const [selectedLanguage, setSelectedLanguage] = useState("English");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [showAnswer, setShowAnswer] = useState(false);
   const [currentLevel, setCurrentLevel] = useState(1);
   const [userAnswers, setUserAnswers] = useState([]);
   const [quizStartTime, setQuizStartTime] = useState(null);
- 
+
   // Fetch classes
   useEffect(() => {
-    fastAPI.get(API_CONFIG.FASTAPI.QUICK_PRACTICE.GET_CLASSES)
+    fastAPI.get(UPDATED_API_CONFIG.FASTAPI.QUICK_PRACTICE.GET_CLASSES)
       .then((data) => setClasses(data.classes))
       .catch(() => setError("Failed to load classes"));
   }, []);
- 
+
   const fetchSubjects = (className) => {
     if (!className) return;
     setLoading(true);
-    fastAPI.get(API_CONFIG.FASTAPI.QUICK_PRACTICE.GET_CHAPTERS(className))
+    fastAPI.get(UPDATED_API_CONFIG.FASTAPI.QUICK_PRACTICE.GET_CHAPTERS(className))
       .then((data) => {
         setSubjects(data.chapters || []);
         setLoading(false);
@@ -48,11 +64,11 @@ function Quiz() {
         setLoading(false);
       });
   };
- 
+
   const fetchSubtopics = (className, subject) => {
     if (!className || !subject) return;
     setLoading(true);
-    fastAPI.get(API_CONFIG.FASTAPI.QUICK_PRACTICE.GET_SUBTOPICS(className, subject))
+    fastAPI.get(UPDATED_API_CONFIG.FASTAPI.QUICK_PRACTICE.GET_SUBTOPICS(className, subject))
       .then((data) => {
         if (Array.isArray(data.subtopics)) {
           setSubtopics({ "Chapter 1": data.subtopics });
@@ -69,27 +85,27 @@ function Quiz() {
         setLoading(false);
       });
   };
- 
-  // UPDATED: fetchQuiz now accepts language parameter
+
+  // UPDATED: fetchQuiz now uses new backend URL
   const fetchQuiz = (subtopic, level = 1, retry = false, language = "English") => {
     if (!subtopic) return;
     setLoading(true);
     
-    // Construct URL with language parameter using API config
+    // Construct URL with language parameter using updated API config
     const params = {
       subtopic: subtopic,
       currentLevel: level,
       retry: retry,
       language: language
     };
-    const url = API_CONFIG.FASTAPI.QUICK_PRACTICE.GENERATE_QUIZ(params);
+    const url = UPDATED_API_CONFIG.FASTAPI.QUICK_PRACTICE.GENERATE_QUIZ(params);
     
-    console.log("Fetching quiz with URL:", url); // Debug log
-    console.log("Language being sent:", language); // Debug log
+    console.log("Fetching quiz with URL:", url);
+    console.log("Language being sent:", language);
     
     fastAPI.get(url)
       .then((data) => {
-        console.log("Quiz data received:", data); // Debug log
+        console.log("Quiz data received:", data);
         if (data.error) setError(data.error);
         else {
           const cleanedQuiz = data.quiz.map((q) => {
@@ -115,47 +131,46 @@ function Quiz() {
         setLoading(false);
       });
   };
- 
+
   const handleClassClick = (className) => {
     setSelectedClass(className);
     setSelectedSubject(null);
     setSelectedSubtopic(null);
     fetchSubjects(className);
   };
- 
+
   const handleSubjectClick = (subject) => {
     setSelectedSubject(subject);
     setSelectedSubtopic(null);
     fetchSubtopics(selectedClass, subject);
   };
- 
-  // UPDATED: handleSubtopicClick now accepts language parameter
+
   const handleSubtopicClick = (subtopic, language = "English") => {
-    console.log("Subtopic clicked:", subtopic, "Language:", language); // Debug log
+    console.log("Subtopic clicked:", subtopic, "Language:", language);
     setSelectedSubtopic(subtopic);
-    setSelectedLanguage(language); // Store the selected language
+    setSelectedLanguage(language);
     setCurrentLevel(1);
     setCurrentQ(0);
     setScore(0);
     setIsFinished(false);
     setUserAnswers([]);
     setError(null);
-    setQuizStartTime(Date.now()); // Start timing the quiz
+    setQuizStartTime(Date.now());
     enterFullScreen();
-    fetchQuiz(subtopic, 1, false, language); // Pass language to fetchQuiz
+    fetchQuiz(subtopic, 1, false, language);
   };
- 
+
   const handleAnswer = (option) => {
     setSelected(option);
     setShowAnswer(true);
- 
+
     const newAnswers = [...userAnswers];
     newAnswers[currentQ] = option;
     setUserAnswers(newAnswers);
- 
+
     if (option === quiz[currentQ].answer) setScore(score + 1);
   };
- 
+
   const nextQuestion = async () => {
     if (currentQ < quiz.length - 1) {
       setCurrentQ(currentQ + 1);
@@ -173,11 +188,11 @@ function Quiz() {
         const quizData = {
           quizType: 'ai_generated',
           subject: selectedSubject || 'Unknown',
-          chapter: '', // Not available in current structure
-          topic: selectedSubject || 'Unknown', // Using subject as topic
+          chapter: '',
+          topic: selectedSubject || 'Unknown',
           subtopic: selectedSubtopic || 'Unknown',
           className: selectedClass || 'Unknown',
-          difficultyLevel: 'simple', // Default for now
+          difficultyLevel: 'simple',
           language: selectedLanguage || 'English',
           totalQuestions: quizStats.totalQuestions || 0,
           correctAnswers: quizStats.correctAnswers || 0,
@@ -185,8 +200,8 @@ function Quiz() {
           unansweredQuestions: quizStats.unansweredQuestions || 0,
           timeTakenSeconds: timeTakenSeconds || 0,
           score: quizStats.score || 0,
-          quizQuestions: quiz || [], // Send actual quiz data
-          userAnswers: (userAnswers || []).filter(answer => answer !== null) // Filter out null answers
+          quizQuestions: quiz || [],
+          userAnswers: (userAnswers || []).filter(answer => answer !== null)
         };
         
         // Submit to backend
@@ -194,23 +209,21 @@ function Quiz() {
         const submitResponse = await submitQuizAttempt(quizData);
         console.log('✅ Quiz attempt submitted successfully!', submitResponse);
         
-        // Update local quiz results (existing functionality)
+        // Update local quiz results
         updateQuizResults(score, quiz.length, currentLevel, selectedClass, selectedSubject, selectedSubtopic);
         
       } catch (error) {
         console.error('❌ Error submitting quiz attempt:', error);
         console.error('❌ Error details:', error.message);
         console.error('❌ Stack trace:', error.stack);
-        // Still update local results even if backend submission fails
         updateQuizResults(score, quiz.length, currentLevel, selectedClass, selectedSubject, selectedSubtopic);
-        // Show error to user
         alert('Warning: Quiz results saved locally, but could not sync to server. Please check your connection.');
       } finally {
         exitFullScreen();
       }
     }
   };
- 
+
   const prevQuestion = () => {
     if (currentQ > 0) {
       setCurrentQ(currentQ - 1);
@@ -218,9 +231,8 @@ function Quiz() {
       setShowAnswer(false);
     }
   };
- 
+
   const backToChapters = () => {
-    // Only reset quiz and subtopic, keep subjects and class to avoid blinking
     setSelectedSubtopic(null);
     setQuiz([]);
     setCurrentQ(0);
@@ -231,21 +243,19 @@ function Quiz() {
     setUserAnswers([]);
     exitFullScreen();
   };
- 
-  // UPDATED: retryQuiz now uses stored language
+
   const retryQuiz = () => {
     enterFullScreen();
     fetchQuiz(selectedSubtopic, currentLevel, true, selectedLanguage);
   };
- 
-  // UPDATED: nextLevel now uses stored language
+
   const nextLevel = () => {
     const nextLvl = currentLevel + 1;
     setCurrentLevel(nextLvl);
     fetchQuiz(selectedSubtopic, nextLvl, false, selectedLanguage);
     enterFullScreen();
   };
- 
+
   const enterFullScreen = () => {
     const elem = document.documentElement;
     if (elem.requestFullscreen) elem.requestFullscreen().catch(() => {});
@@ -253,14 +263,14 @@ function Quiz() {
     else if (elem.webkitRequestFullscreen) elem.webkitRequestFullscreen();
     else if (elem.msRequestFullscreen) elem.msRequestFullscreen();
   };
- 
+
   const exitFullScreen = () => {
     if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
     else if (document.mozCancelFullScreen) document.mozCancelFullScreen();
     else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
     else if (document.msExitFullscreen) document.msExitFullscreen();
   };
- 
+
   if (loading)
     return (
       <div className="loading-container">
@@ -278,7 +288,7 @@ function Quiz() {
         <p>Preparing your Quiz...</p>
       </div>
     );
- 
+
   return (
     <>
       {error && (
@@ -290,25 +300,25 @@ function Quiz() {
           </button>
         </div>
       )}
- 
+
       {/* Grade Selection */}
       {!selectedClass && !error && (
         <QuizGrade classes={classes} onClassClick={handleClassClick} />
       )}
- 
-      {/* Subject / Subtopic Selection - UPDATED: Pass handleSubtopicClick that accepts language */}
+
+      {/* Subject / Subtopic Selection */}
       {selectedClass && !selectedSubtopic && !error && (
         <QuizSubject
           subjects={subjects}
           subtopics={subtopics}
           selectedSubject={selectedSubject}
           selectedClass={selectedClass}
-          onClassClick={() => setSelectedClass(null)} // smooth back to grades
+          onClassClick={() => setSelectedClass(null)}
           onSubjectClick={handleSubjectClick}
-          onSubtopicClick={handleSubtopicClick} // This now accepts (subtopic, language)
+          onSubtopicClick={handleSubtopicClick}
         />
       )}
- 
+
       {/* Quiz Page */}
       {selectedSubtopic && !error && (
         <QuizQuestion
@@ -326,11 +336,11 @@ function Quiz() {
           backToChapters={backToChapters}
           currentLevel={currentLevel}
           userAnswers={userAnswers}
-          selectedLanguage={selectedLanguage} // Pass language to QuizQuestion if needed
+          selectedLanguage={selectedLanguage}
         />
       )}
     </>
   );
 }
- 
+
 export default Quiz;
