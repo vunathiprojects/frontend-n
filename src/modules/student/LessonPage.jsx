@@ -19,76 +19,7 @@ import {
   Copy,
   Check
 } from 'lucide-react';
-
-// Updated API configuration with new backend URL
-const API_CONFIG = {
-  FASTAPI: {
-    BASE_URL: 'https://backend-n.azurewebsites.net',
-    AI_ASSISTANT: {
-      CHAT: '/ai/chat'
-    }
-  },
-  DJANGO: {
-    BASE_URL: 'https://backend-n.azurewebsites.net',
-    AI_ASSISTANT: {
-      SAVE_CHAT_MESSAGE: '/api/save-chat-message/',
-      GET_CHAT_HISTORY: '/api/get-chat-history/',
-      SAVE_STUDY_PLAN: '/api/save-study-plan/',
-      SAVE_AI_NOTE: '/api/save-ai-note/',
-      SAVE_MANUAL_NOTE: '/api/save-manual-note/',
-      GET_MANUAL_NOTES: '/api/get-manual-notes/',
-      UPDATE_MANUAL_NOTE: (noteId) => `/api/update-manual-note/${noteId}/`,
-      DELETE_MANUAL_NOTE: (noteId) => `/api/delete-manual-note/${noteId}/`
-    }
-  }
-};
-
-// API instances with updated base URLs
-const fastAPI = {
-  post: async (endpoint, data) => {
-    const response = await fetch(`${API_CONFIG.FASTAPI.BASE_URL}${endpoint}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(data)
-    });
-    return response.json();
-  }
-};
-
-const djangoAPI = {
-  get: async (endpoint) => {
-    const response = await fetch(`${API_CONFIG.DJANGO.BASE_URL}${endpoint}`);
-    return response.json();
-  },
-  post: async (endpoint, data) => {
-    const response = await fetch(`${API_CONFIG.DJANGO.BASE_URL}${endpoint}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(data)
-    });
-    return response.json();
-  },
-  put: async (endpoint, data) => {
-    const response = await fetch(`${API_CONFIG.DJANGO.BASE_URL}${endpoint}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(data)
-    });
-    return response.json();
-  },
-  delete: async (endpoint) => {
-    const response = await fetch(`${API_CONFIG.DJANGO.BASE_URL}${endpoint}`, {
-      method: 'DELETE'
-    });
-    return response.json();
-  }
-};
+import { API_CONFIG, fastAPI, djangoAPI } from '../../config/api';
 
 const LessonPage = () => {
   const { class: classNumber, subject, chapterNumber } = useParams();
@@ -1585,3 +1516,5 @@ const LessonPage = () => {
 };
 
 export default LessonPage;
+
+ 
